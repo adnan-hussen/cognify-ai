@@ -1,12 +1,20 @@
 // src/components/MenuModal.jsx
 import { useNavigate } from 'react-router-dom'
+import { useMsal } from '@azure/msal-react'; 
 
 function MenuModal({ onClose, onUpdateInfo }) {
   const navigate = useNavigate()
+  const { instance } = useMsal(); 
 
-  const handleLogout = () => {
-    // Add any logout logic here (clearing session, etc.)
-    navigate('/')
+  const handleLogout = async () => {
+    try {
+      // Use logoutRedirect instead of logoutPopup
+      await instance.logoutRedirect({
+        postLogoutRedirectUri: window.location.origin
+      });
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   }
 
   return (
