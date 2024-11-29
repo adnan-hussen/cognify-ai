@@ -7,7 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './components/LandingPage';
 import ChatInterface from './components/ChatInterface';
 import InitialSurvey from './components/InitialSurvey';
-import VoiceConversation from './components/VoiceConversation';
+// import VoiceConversation from './components/ChatInterface';
 
 
 
@@ -30,14 +30,14 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
-                    <Route
+                    {/* <Route
                     path="/voice"
                     element={
                         <ProtectedRoute>
                            <VoiceConversation/>
                         </ProtectedRoute>
                     }
-                    />
+                    /> */}
                     
                     <Route
                         path="/assessment"
