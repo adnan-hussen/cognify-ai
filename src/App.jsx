@@ -9,6 +9,10 @@ import ChatInterface from './components/ChatInterface';
 import InitialSurvey from './components/InitialSurvey';
 import VoiceConversation from './components/VoiceConversation';
 
+
+
+
+
 function App() {
     return (
         <Router>
@@ -27,13 +31,14 @@ function App() {
                         }
                     />
                     <Route
-                        path="/voice"
-                        element={
-                            <ProtectedRoute>
-                                <VoiceConversation />
-                            </ProtectedRoute>
-                        }
+                    path="/voice"
+                    element={
+                        <ProtectedRoute>
+                           <VoiceConversation/>
+                        </ProtectedRoute>
+                    }
                     />
+                    
                     <Route
                         path="/assessment"
                         element={

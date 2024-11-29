@@ -5,7 +5,7 @@ const DEPLOYMENT_NAME = import.meta.env.VITE_DEPLOYMENT_NAME;
 
 export async function sendMessage(message, conversationHistory = []) {
     try {
-        const response = await fetch(`${AZURE_ENDPOINT}/openai/deployments/${DEPLOYMENT_NAME}/chat/completions?api-version=2023-07-01-preview`, {
+        const response = await fetch(`${AZURE_ENDPOINT}/openai/deployments/${DEPLOYMENT_NAME}/chat/completions?api-version=2024-07-01-preview`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
