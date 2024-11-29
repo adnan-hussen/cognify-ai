@@ -1,304 +1,475 @@
-// src/components/VoiceConversation.jsx
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Player } from './player.js'; // Ensure correct path and extension
+import React, { useState, useRef, useEffect } from "react";
+import {
+  RTClient,
+ 
+} from "rt-client";
+import { AudioHandler } from "@/lib/audio";
 
-function VoiceConversation() {
-  const navigate = useNavigate();
-  const [isMuted, setIsMuted] = useState(false);
-  const [isActive, setIsActive] = useState(true);
-  const [waveHeights, setWaveHeights] = useState(Array(30).fill(10));
-  const [transcription, setTranscription] = useState(""); // Store live transcription
-  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+// Bootstrap components
+import {
+  Accordion,
+  Card,
+  Button,
+  Form,
+  InputGroup,
+  Dropdown,
+} from "react-bootstrap";
+import { Plus, SendFill, MicFill, MicMuteFill, Power } from "react-bootstrap-icons";
 
-  const socketRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const workletNodeRef = useRef(null);
-  const playerRef = useRef(null);
+const VoiceConversation = () => {
+  const [isAzure, setIsAzure] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState("");
+  const [deployment, setDeployment] = useState("");
+  const [useVAD, setUseVAD] = useState(true);
+  const [instructions, setInstructions] = useState("");
+  const [temperature, setTemperature] = useState(0.9);
+  const [modality, setModality] = useState("audio");
+  const [tools, setTools] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [currentMessage, setCurrentMessage] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const clientRef = useRef(null);
+  const audioHandlerRef = useRef(null);
 
-  // Environment variables
-  const API_URL = import.meta.env.VITE_AZURE_REALTIME_ENDPOINT; // "wss://havenaigpt4o.openai.azure.com/openai/realtime"
-  const API_VERSION = "2024-10-01-preview";
-  const DEPLOYMENT = import.meta.env.VITE_AZURE_REALTIME_DEPLOYMENT; // "gpt-4o-realtime-preview"
-  const API_KEY = import.meta.env.VITE_AZURE_REALTIME_API_KEY; // Your API key
+  const addTool = () => {
+    setTools([...tools, { name: "", parameters: "", returnValue: "" }]);
+  };
 
-  const fullUrl = `${API_URL}?api-version=${API_VERSION}&deployment=${DEPLOYMENT}&api-key=${API_KEY}`;
+  const updateTool = (index, field, value) => {
+    const newTools = [...tools];
+    newTools[index][field] = value;
+    setTools(newTools);
+  };
 
-  // Initialize Player
+  const handleConnect = async () => {
+    if (!isConnected) {
+      try {
+        setIsConnecting(true);
+        clientRef.current = isAzure
+          ? new RTClient(new URL(endpoint), { key: apiKey }, { deployment })
+          : new RTClient(
+              { key: apiKey },
+              { model: "gpt-4o-realtime-preview-2024-10-01" }
+            );
+        const modalities =
+          modality === "audio" ? ["text", "audio"] : ["text"];
+        const turnDetection = useVAD ? { type: "server_vad" } : null;
+        clientRef.current.configure({
+          instructions: instructions?.length > 0 ? instructions : undefined,
+          input_audio_transcription: { model: "whisper-1" },
+          turn_detection: turnDetection,
+          tools,
+          temperature,
+          modalities,
+        });
+        startResponseListener();
+
+        setIsConnected(true);
+      } catch (error) {
+        console.error("Connection failed:", error);
+      } finally {
+        setIsConnecting(false);
+      }
+    } else {
+      await disconnect();
+    }
+  };
+
+  const disconnect = async () => {
+    if (clientRef.current) {
+      try {
+        await clientRef.current.close();
+        clientRef.current = null;
+        setIsConnected(false);
+      } catch (error) {
+        console.error("Disconnect failed:", error);
+      }
+    }
+  };
+
+  const handleResponse = async (response) => {
+    for await (const item of response) {
+      if (item.type === "message" && item.role === "assistant") {
+        const message = {
+          type: item.role,
+          content: "",
+        };
+        setMessages((prevMessages) => [...prevMessages, message]);
+        for await (const content of item) {
+          if (content.type === "text") {
+            for await (const text of content.textChunks()) {
+              message.content += text;
+              setMessages((prevMessages) => {
+                prevMessages[prevMessages.length - 1].content =
+                  message.content;
+                return [...prevMessages];
+              });
+            }
+          } else if (content.type === "audio") {
+            const textTask = async () => {
+              for await (const text of content.transcriptChunks()) {
+                message.content += text;
+                setMessages((prevMessages) => {
+                  prevMessages[prevMessages.length - 1].content =
+                    message.content;
+                  return [...prevMessages];
+                });
+              }
+            };
+            const audioTask = async () => {
+              audioHandlerRef.current?.startStreamingPlayback();
+              for await (const audio of content.audioChunks()) {
+                audioHandlerRef.current?.playChunk(audio);
+              }
+            };
+            await Promise.all([textTask(), audioTask()]);
+          }
+        }
+      }
+    }
+  };
+
+  const handleInputAudio = async (item) => {
+    audioHandlerRef.current?.stopStreamingPlayback();
+    await item.waitForCompletion();
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      {
+        type: "user",
+        content: item.transcription || "",
+      },
+    ]);
+  };
+
+  const startResponseListener = async () => {
+    if (!clientRef.current) return;
+
+    try {
+      for await (const serverEvent of clientRef.current.events()) {
+        if (serverEvent.type === "response") {
+          await handleResponse(serverEvent);
+        } else if (serverEvent.type === "input_audio") {
+          await handleInputAudio(serverEvent);
+        }
+      }
+    } catch (error) {
+      if (clientRef.current) {
+        console.error("Response iteration error:", error);
+      }
+    }
+  };
+
+  const sendMessage = async () => {
+    if (currentMessage.trim() && clientRef.current) {
+      try {
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: "user",
+            content: currentMessage,
+          },
+        ]);
+
+        await clientRef.current.sendItem({
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: currentMessage }],
+        });
+        await clientRef.current.generateResponse();
+        setCurrentMessage("");
+      } catch (error) {
+        console.error("Failed to send message:", error);
+      }
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (!isRecording && clientRef.current) {
+      try {
+        if (!audioHandlerRef.current) {
+          audioHandlerRef.current = new AudioHandler();
+          await audioHandlerRef.current.initialize();
+        }
+        await audioHandlerRef.current.startRecording(async (chunk) => {
+          await clientRef.current?.sendAudio(chunk);
+        });
+        setIsRecording(true);
+      } catch (error) {
+        console.error("Failed to start recording:", error);
+      }
+    } else if (audioHandlerRef.current) {
+      try {
+        audioHandlerRef.current.stopRecording();
+        if (!useVAD) {
+          const inputAudio = await clientRef.current?.commitAudio();
+          await handleInputAudio(inputAudio);
+          await clientRef.current?.generateResponse();
+        }
+        setIsRecording(false);
+      } catch (error) {
+        console.error("Failed to stop recording:", error);
+      }
+    }
+  };
+
   useEffect(() => {
-    playerRef.current = new Player();
-    playerRef.current.init(24000); // Initialize with a sample rate of 24,000 Hz
+    const initAudioHandler = async () => {
+      const handler = new AudioHandler();
+      await handler.initialize();
+      audioHandlerRef.current = handler;
+    };
+
+    initAudioHandler().catch(console.error);
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.clear();
-      }
+      disconnect();
+      audioHandlerRef.current?.close().catch(console.error);
     };
   }, []);
 
-  // Waveform Animation
-  useEffect(() => {
-    if (!isActive) return;
-
-    const interval = setInterval(() => {
-      setWaveHeights(prev =>
-        prev.map(() => (isMuted ? 5 : Math.random() * 40 + 10))
-      );
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isActive, isMuted]);
-
-  // Initialize WebSocket and Audio Capture
-  useEffect(() => {
-    if (isActive) {
-      initializeWebSocket();
-      startAudioCapture();
-    }
-
-    return () => {
-      stopAudioCapture();
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]);
-
-  // Helper: Decode Base64 to Int16Array
-  const decodeBase64ToInt16Array = (base64) => {
-    const binaryString = atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    const int16Array = new Int16Array(bytes.buffer);
-    return int16Array;
-  };
-
-  // Initialize WebSocket Connection
-  const initializeWebSocket = () => {
-    if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
-      console.log('WebSocket already initialized.');
-      return;
-    }
-
-    try {
-      socketRef.current = new WebSocket(fullUrl);
-
-      socketRef.current.onopen = () => {
-        console.log('WebSocket connected');
-        setConnectionStatus('Connected');
-        socketRef.current.send(
-          JSON.stringify({
-            type: 'session.update',
-            session: {
-              voice: 'alloy',
-              input_audio_format: 'pcm16',
-              input_audio_transcription: {
-                model: 'whisper-1',
-              },
-              turn_detection: {
-                type: 'server_vad',
-                threshold: 0.4,
-                silence_duration_ms: 600,
-              },
-            },
-          })
-        );
-      };
-
-      socketRef.current.onmessage = event => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received message:', data);
-
-          if (data.error) {
-            console.error('API Error:', data.error);
-            alert(`Error: ${data.error.message}`);
-            return;
-          }
-
-          switch (data.type) {
-            case 'session.created':
-              console.log('Session successfully created.');
-              makeNewTextBlock("<< Session Started >>");
-              break;
-
-            case 'session.updated':
-              console.log('Session updated:', data);
-              // Handle session updates if necessary
-              break;
-
-            case 'response.text.delta':
-              setTranscription(prev => prev + (data.delta.text || ''));
-              break;
-
-            case 'response.audio.delta':
-              if (data.delta.audio) {
-                const audioBuffer = decodeBase64ToInt16Array(data.delta.audio);
-                playerRef.current.play(audioBuffer);
-              }
-              break;
-
-            case 'conversation.item.input_audio_transcription.completed':
-              setTranscription(prev => prev + `\n[Transcription]: ${data.transcript}`);
-              break;
-
-            case 'response.done':
-              console.log('Response generation completed.');
-              makeNewTextBlock("<< Response Completed >>");
-              break;
-
-            case 'error':
-              console.error('API Error:', data.error.message);
-              alert(`Error: ${data.error.message}`);
-              break;
-
-            default:
-              console.log('Unhandled message type:', data.type);
-          }
-        } catch (error) {
-          console.error('Failed to parse message:', error);
-        }
-      };
-
-      socketRef.current.onclose = event => {
-        console.log('WebSocket disconnected:', event.reason || 'Unknown reason');
-        setConnectionStatus('Disconnected');
-      };
-
-      socketRef.current.onerror = error => {
-        console.error('WebSocket error:', error);
-        alert('An error occurred with the WebSocket connection. Please try again later.');
-      };
-    } catch (error) {
-      console.error('WebSocket initialization failed:', error.message);
-      alert('WebSocket initialization failed. Please check your connection and try again.');
-    }
-  };
-
-  // Start Audio Capture
-  const startAudioCapture = async () => {
-    try {
-      audioContextRef.current = new AudioContext({ sampleRate: 24000 });
-      await audioContextRef.current.audioWorklet.addModule('/audio-processor.js');
-
-      mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
-
-      const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-processor');
-      workletNodeRef.current = workletNode;
-
-      workletNode.port.postMessage({ command: "START_RECORDING" });
-
-      workletNode.port.onmessage = (event) => {
-        const { type, audioData } = event.data;
-        if (type === 'audio-chunk') {
-          if (isMuted || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
-
-          // Convert Int16Array to Base64 string
-          let binary = '';
-          for (let i = 0; i < audioData.length; i++) {
-            binary += String.fromCharCode(audioData[i] & 0xff, (audioData[i] >> 8) & 0xff);
-          }
-          const base64Audio = btoa(binary);
-
-          // Send the audio chunk to the WebSocket
-          socketRef.current.send(
-            JSON.stringify({
-              type: 'input_audio_buffer.append',
-              audio: base64Audio,
-            })
-          );
-        }
-      };
-
-      source.connect(workletNode);
-    } catch (error) {
-      console.error('Audio capture initialization failed:', error.message);
-      alert('Microphone access is required to use this feature.');
-    }
-  };
-
-  // Stop Audio Capture
-  const stopAudioCapture = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-    if (workletNodeRef.current) {
-      workletNodeRef.current.port.postMessage({ command: "STOP_RECORDING" });
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
-    }
-  };
-
-  // Handle Stop Button
-  const handleStop = () => {
-    setIsActive(false);
-    setTimeout(() => navigate('/chat'), 500);
-  };
-
-  // UI Helper Functions
-  const makeNewTextBlock = (text = "") => {
-    const container = document.getElementById('received-text-container');
-    if (container) {
-      const newElement = document.createElement("p");
-      newElement.textContent = text;
-      container.appendChild(newElement);
-    }
-  };
-
   return (
-    <div className="voice-conversation-container">
-      <button className="back-button m-4" onClick={handleStop} aria-label="Stop conversation">
-        <i className="bi bi-x-lg"></i>
-      </button>
+    <div className="d-flex vh-100">
+      {/* Parameters Panel */}
+      <div className="bg-light p-4 border-end" style={{ width: "20rem" }}>
+        <Accordion defaultActiveKey="0">
+          {/* Connection Settings */}
+          <Accordion.Item eventKey="0">
+            <Accordion.Header>Connection Settings</Accordion.Header>
+            <Accordion.Body>
+              <Form>
+                <Form.Group className="d-flex align-items-center justify-content-between mb-3">
+                  <Form.Label className="mb-0">Use Azure OpenAI</Form.Label>
+                  <Form.Check
+                    type="switch"
+                    id="use-azure-switch"
+                    checked={isAzure}
+                    onChange={(e) => setIsAzure(e.target.checked)}
+                    disabled={isConnected}
+                  />
+                </Form.Group>
 
-      <div className="voice-content">
-        <h2 className="text-center mb-5">I'm listening...</h2>
-        <p className="text-center">{transcription || "Waiting for transcription..."}</p>
-        <p className="text-center">Status: {connectionStatus}</p>
+                {isAzure && (
+                  <>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Azure Endpoint</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Azure Endpoint"
+                        value={endpoint}
+                        onChange={(e) => setEndpoint(e.target.value)}
+                        disabled={isConnected}
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Deployment Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Deployment Name"
+                        value={deployment}
+                        onChange={(e) => setDeployment(e.target.value)}
+                        disabled={isConnected}
+                      />
+                    </Form.Group>
+                  </>
+                )}
 
-        <div className="wave-container">
-          {waveHeights.map((height, index) => (
+                <Form.Group className="mb-3">
+                  <Form.Label>API Key</Form.Label>
+                  <Form.Control
+                    type="password"
+                    placeholder="API Key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    disabled={isConnected}
+                  />
+                </Form.Group>
+              </Form>
+            </Accordion.Body>
+          </Accordion.Item>
+
+          {/* Conversation Settings */}
+          <Accordion.Item eventKey="1">
+            <Accordion.Header>Conversation Settings</Accordion.Header>
+            <Accordion.Body>
+              <Form>
+                <Form.Group className="d-flex align-items-center justify-content-between mb-3">
+                  <Form.Label className="mb-0">Use Server VAD</Form.Label>
+                  <Form.Check
+                    type="switch"
+                    id="use-vad-switch"
+                    checked={useVAD}
+                    onChange={(e) => setUseVAD(e.target.checked)}
+                    disabled={isConnected}
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Instructions</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    placeholder="Instructions"
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    disabled={isConnected}
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Tools</Form.Label>
+                  {tools.map((tool, index) => (
+                    <Card className="mb-2" key={index}>
+                      <Card.Body>
+                        <Form.Group className="mb-2">
+                          <Form.Control
+                            type="text"
+                            placeholder="Function name"
+                            value={tool.name}
+                            onChange={(e) =>
+                              updateTool(index, "name", e.target.value)
+                            }
+                            disabled={isConnected}
+                          />
+                        </Form.Group>
+                        <Form.Group className="mb-2">
+                          <Form.Control
+                            type="text"
+                            placeholder="Parameters"
+                            value={tool.parameters}
+                            onChange={(e) =>
+                              updateTool(index, "parameters", e.target.value)
+                            }
+                            disabled={isConnected}
+                          />
+                        </Form.Group>
+                        <Form.Group>
+                          <Form.Control
+                            type="text"
+                            placeholder="Return value"
+                            value={tool.returnValue}
+                            onChange={(e) =>
+                              updateTool(index, "returnValue", e.target.value)
+                            }
+                            disabled={isConnected}
+                          />
+                        </Form.Group>
+                      </Card.Body>
+                    </Card>
+                  ))}
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={addTool}
+                    className="w-100"
+                    disabled={isConnected}
+                  >
+                    <Plus className="me-2" />
+                    Add Tool
+                  </Button>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>
+                    Temperature ({temperature.toFixed(1)})
+                  </Form.Label>
+                  <Form.Control
+                    type="range"
+                    min={0.6}
+                    max={1.2}
+                    step={0.1}
+                    value={temperature}
+                    onChange={(e) =>
+                      setTemperature(parseFloat(e.target.value))
+                    }
+                    disabled={isConnected}
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Modality</Form.Label>
+                  <Form.Select
+                    value={modality}
+                    onChange={(e) => setModality(e.target.value)}
+                    disabled={isConnected}
+                  >
+                    <option value="text">Text</option>
+                    <option value="audio">Audio</option>
+                  </Form.Select>
+                </Form.Group>
+              </Form>
+            </Accordion.Body>
+          </Accordion.Item>
+        </Accordion>
+
+        {/* Connect Button */}
+        <Button
+          className="mt-4 w-100"
+          variant={isConnected ? "danger" : "primary"}
+          onClick={handleConnect}
+          disabled={isConnecting}
+        >
+          <Power className="me-2" />
+          {isConnecting
+            ? "Connecting..."
+            : isConnected
+            ? "Disconnect"
+            : "Connect"}
+        </Button>
+      </div>
+
+      {/* Chat Window */}
+      <div className="flex-grow-1 d-flex flex-column">
+        {/* Messages Area */}
+        <div className="flex-grow-1 p-4 overflow-auto d-flex flex-column">
+          {messages.map((message, index) => (
             <div
               key={index}
-              className="wave-bar"
-              style={{
-                height: `${height}px`,
-                opacity: isActive ? 1 : 0.5,
-                transition: 'height 0.1s ease',
-              }}
-            />
+              className={`mb-4 p-3 rounded ${
+                message.type === "user"
+                  ? "bg-primary text-white align-self-end"
+                  : "bg-light align-self-start"
+              }`}
+              style={{ maxWidth: "80%" }}
+            >
+              {message.content}
+            </div>
           ))}
         </div>
 
-        <div className="voice-controls mt-5">
-          <button
-            className={`control-button ${isMuted ? 'active' : ''}`}
-            onClick={() => setIsMuted(!isMuted)}
-            aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
-          >
-            <i className={`bi ${isMuted ? 'bi-mic-mute-fill' : 'bi-mic-fill'}`}></i>
-          </button>
-          <button className="control-button stop-button ms-4" onClick={handleStop} aria-label="Stop conversation">
-            <i className="bi bi-stop-fill"></i>
-          </button>
+        {/* Input Area */}
+        <div className="p-4 border-top">
+          <InputGroup>
+            <Form.Control
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              placeholder="Type your message..."
+              onKeyUp={(e) => e.key === "Enter" && sendMessage()}
+              disabled={!isConnected}
+            />
+            <Button
+              variant={isRecording ? "danger" : "outline-secondary"}
+              onClick={toggleRecording}
+              disabled={!isConnected}
+            >
+              {isRecording ? <MicMuteFill /> : <MicFill />}
+            </Button>
+            <Button
+              onClick={sendMessage}
+              disabled={!isConnected}
+              variant="primary"
+            >
+              <SendFill />
+            </Button>
+          </InputGroup>
         </div>
       </div>
-
-      {/* Container for transcriptions and session messages */}
-      <div id="received-text-container" style={{ display: 'none' }}></div>
     </div>
   );
-}
+};
 
 export default VoiceConversation;
