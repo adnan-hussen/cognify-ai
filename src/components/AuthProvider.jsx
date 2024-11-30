@@ -10,22 +10,13 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const handleRedirect = async () => {
             try {
-                // Wait for MSAL initialization
                 if (inProgress === "startup") {
                     return;
                 }
 
-                // Handle redirect promise
                 const response = await instance.handleRedirectPromise();
                 if (response) {
-                    // Successfully logged in
-                    if (response.account) {
-                        if (response.account.idTokenClaims?.newUser) {
-                            navigate('/assessment');
-                        } else {
-                            navigate('/chat');
-                        }
-                    }
+                    navigate('/chat'); // Always go to chat
                 }
             } catch (error) {
                 console.error('Redirect error:', error);
@@ -37,10 +28,7 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         if (accounts.length > 0) {
-            const currentAccount = accounts[0];
-            if (currentAccount?.idTokenClaims?.newUser) {
-                navigate('/assessment');
-            }
+            navigate('/chat'); // Always go to chat
         }
     }, [accounts, navigate]);
 

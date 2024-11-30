@@ -6,7 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 // Components
 import LandingPage from './components/LandingPage';
 import ChatInterface from './components/ChatInterface';
-import InitialSurvey from './components/InitialSurvey';
+
 // import VoiceConversation from './components/ChatInterface';
 
 
@@ -39,14 +39,7 @@ function App() {
                     }
                     /> */}
                     
-                    <Route
-                        path="/assessment"
-                        element={
-                            <ProtectedRoute>
-                                <InitialSurvey />
-                            </ProtectedRoute>
-                        }
-                    />
+                   
                     
                     {/* Catch-all route - redirect to home */}
                     <Route path="*" element={<Navigate to="/" />} />

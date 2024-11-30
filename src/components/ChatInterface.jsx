@@ -1,12 +1,14 @@
-// src/components/VoiceConversation.jsx
+// src/components/ChatInterface.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useMsal } from '@azure/msal-react';
 import { RTClient } from "rt-client";
 import { AudioHandler } from "@/lib/audio";
 import MenuModal from './MenuModal';
-import { Weight } from "lucide-react";
+import InitialSurvey from './InitialSurvey';
 
-function VoiceConversation() {
+function ChatInterface() {
+ const { accounts } = useMsal();
  const navigate = useNavigate();
  const [messages, setMessages] = useState([]);
  const [currentMessage, setCurrentMessage] = useState("");
@@ -15,6 +17,7 @@ function VoiceConversation() {
  const [isConnecting, setIsConnecting] = useState(false);
  const [waveHeights, setWaveHeights] = useState(Array(30).fill(10));
  const [showMenu, setShowMenu] = useState(false);
+ const [showAssessment, setShowAssessment] = useState(false);
 
  const clientRef = useRef(null);
  const audioHandlerRef = useRef(null);
@@ -23,6 +26,12 @@ function VoiceConversation() {
  const endpoint = import.meta.env.VITE_REALTIME_ENDPOINT;
  const apiKey = import.meta.env.VITE_REALTIME_KEY;
  const deployment = import.meta.env.VITE_REALTIME_DEPLOYMENT;
+
+ useEffect(() => {
+   if (accounts[0]?.idTokenClaims?.newUser) {
+     setShowAssessment(true);
+   }
+ }, [accounts]);
 
  const handleConnect = async () => {
    if (!isConnected) {
@@ -202,7 +211,7 @@ function VoiceConversation() {
 
  const handleUpdateInfo = () => {
    setShowMenu(false);
-   navigate('/assessment');
+   setShowAssessment(true);
  };
 
  useEffect(() => {
@@ -241,14 +250,13 @@ function VoiceConversation() {
        <i className="bi bi-list"></i>
      </button>
 
-    
-
      <div className="chat-content d-flex flex-column">
-       <h1 className="gradient-text text-center mb-4">Voice Chat</h1>
+       <h1 className="gradient-text text-center mb-4">Haven AI</h1>
 
        {!isConnected && (
          <button 
            className="btn btn-custom w-50 mx-auto mb-4"
+           id="start-button"
            style={{fontWeight:200,fontSize:25}}
            onClick={handleConnect}
            disabled={isConnecting}
@@ -287,27 +295,28 @@ function VoiceConversation() {
      </div>
      
      <div className="chat-input-container">
-       <div className="input-group">
+       <div className="input-group"
+       style={!isConnected?{backgroundColor:"rgba(160,160,160,1)"}:{backgroundColor:"white"}}>
          <input
            type="text"
            className="form-control"
-           placeholder="Type a Message or Start a Voice Conversation"
+           placeholder={isConnected?"Type a Message or Start a Voice Conversation":""}
            value={currentMessage}
            onChange={(e) => setCurrentMessage(e.target.value)}
            onKeyUp={(e) => e.key === "Enter" && sendMessage()}
-           disabled={!isConnected}
+           disabled={!isConnected || showAssessment}
          />
          <button 
            className="btn send-btn"
            onClick={sendMessage}
-           disabled={!isConnected || !currentMessage.trim()}
+           disabled={!isConnected || !currentMessage.trim() || showAssessment}
          >
            <i className="bi bi-send-fill"></i>
          </button>
          <button 
            className="btn voice-btn"
            onClick={toggleRecording}
-           disabled={!isConnected}
+           disabled={!isConnected || showAssessment}
          >
            <i className={`bi ${isRecording ? 'bi-mic-mute-fill' : 'bi-mic-fill'}`}></i>
          </button>
@@ -320,8 +329,15 @@ function VoiceConversation() {
          onUpdateInfo={handleUpdateInfo}
        />
      )}
+
+     {showAssessment && (
+       <InitialSurvey 
+         onClose={() => setShowAssessment(false)}
+         isModal={true}
+       />
+     )}
    </div>
  );
 }
 
-export default VoiceConversation;
+export default ChatInterface;

@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import { sendMessage } from '../services/openaiService';
-import MenuModal from './MenuModal';
+import MenuModal from './src/components/MenuModal';
 
 function ChatInterface() {
    const navigate = useNavigate();
