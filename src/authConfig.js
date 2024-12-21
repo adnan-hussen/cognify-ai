@@ -1,9 +1,9 @@
 // src/authConfig.js
 export const msalConfig = {
     auth: {
-        clientId: "7fcbd5e4-38d5-43e6-937e-00f4750825ae", // Application (client) ID from Azure
-        authority: "https://havenai1.b2clogin.com/havenai1.onmicrosoft.com/B2C_1_signupin",
-        knownAuthorities: ["havenai1.b2clogin.com"],
+        clientId: "71caec0f-8b1f-4014-bc6c-c212d3a46ae1", // Application (client) ID from Azure
+        authority: "https://cognifyaitutor.b2clogin.com/cognifyaitutor.onmicrosoft.com/B2C_1_signinup",
+        knownAuthorities: ["cognifyaitutor.b2clogin.com"],
         redirectUri: window.location.origin, // Your app's redirect URI
     },
     cache: {

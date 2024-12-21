@@ -5,12 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Components
 import LandingPage from './components/LandingPage';
-import ChatInterface from './components/ChatInterface';
-
-// import VoiceConversation from './components/ChatInterface';
-
-
-
+import FileUploadInterface from './components/FileUploadInterface';
 
 
 function App() {
@@ -26,22 +21,11 @@ function App() {
                         path="/chat"
                         element={
                             <ProtectedRoute>
-                                <ChatInterface />
+                                <FileUploadInterface />
                             </ProtectedRoute>
                         }
                     />
-                    {/* <Route
-                    path="/voice"
-                    element={
-                        <ProtectedRoute>
-                           <VoiceConversation/>
-                        </ProtectedRoute>
-                    }
-                    /> */}
                     
-                   
-                    
-                    {/* Catch-all route - redirect to home */}
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
             </AuthProvider>

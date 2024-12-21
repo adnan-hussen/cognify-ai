@@ -1,7 +1,7 @@
 {
-  "name": "haven-ai",
+  "name": "cognify-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -41,5 +41,17 @@
     "eslint-plugin-react-refresh": "^0.4.5",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
-  }
+  },
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "main": "eslint.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnan-hussen/cognify-ai.git"
+  },
+  "author": "Adnan Hussen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/adnan-hussen/cognify-ai/issues"
+  },
+  "homepage": "https://github.com/adnan-hussen/cognify-ai#readme"
 }
