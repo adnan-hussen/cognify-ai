@@ -1,128 +1,168 @@
-import React, { useState } from 'react';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+// Import WebGazer from npm
+import webgazer from 'webgazer';
 
-const LessonViewer = () => {
+const LessonViewer = ({ lesson }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState({});
-  
-  const lesson = {
-    title: "Introduction to History",
-    steps: [
-      {
-        id: 1,
-        type: 'content',
-        title: 'Ancient Civilizations',
-        content: 'Ancient civilizations laid the groundwork for modern society. The earliest known civilizations developed in Mesopotamia, Egypt, India, and China. These societies were characterized by organized agriculture, complex social structures, and written communication systems.'
-      },
-      {
-        id: 2,
-        type: 'quiz',
-        question: 'Which of these was a characteristic of ancient civilizations?',
-        options: [
-          'Organized agriculture',
-          'Space travel',
-          'Digital technology',
-          'Modern medicine'
-        ],
-        correctAnswer: 'Organized agriculture'
-      }
-    ]
-  };
-  
-  const progress = ((currentStep + 1) / lesson.steps.length) * 100;
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [showAnswers, setShowAnswers] = useState(false);
 
+  // Eye-tracking: immediate "looking away" feedback
+  const [isLookingAway, setIsLookingAway] = useState(false);
+
+  const totalSteps = lesson.steps.length;
+  const step = lesson.steps[currentStep];
+  const progress = ((currentStep + 1) / totalSteps) * 100;
+
+  useEffect(() => {
+    // 1) Initialize WebGazer
+    webgazer
+      .setRegression('ridge') // Use default regression
+      .setGazeListener((gazeData) => {
+        if (!gazeData) {
+          // If no gaze data is available
+          setIsLookingAway(true);
+        } else {
+          // If gaze coordinates are off-screen, consider "looking away"
+          if (isOutOfScreen(gazeData.x, gazeData.y)) {
+            setIsLookingAway(true);
+          } else {
+            setIsLookingAway(false);
+          }
+        }
+      })
+      .begin();
+
+    // 2) Hide webcam preview and overlays
+    webgazer
+      .showVideoPreview(false) // Hide camera feed
+      .showFaceOverlay(false) // Hide face overlay
+      .showFaceFeedbackBox(false); // Hide feedback box
+
+    // Cleanup when unmounting the component
+    return () => {
+      try {
+        webgazer.end(); // Stop WebGazer and release resources
+      } catch (err) {
+        console.warn('Error during webgazer.end():', err);
+      }
+    };
+  }, []);
+
+  // Utility: check if gaze coordinates are off the visible window
+  const isOutOfScreen = (x, y) => {
+    if (x == null || y == null) return true;
+    if (x < 0 || x > window.innerWidth) return true;
+    if (y < 0 || y > window.innerHeight) return true;
+    return false;
+  };
+
+  // ---------- LESSON AND QUIZ LOGIC ----------
   const handleNext = () => {
-    if (currentStep < lesson.steps.length - 1) {
-      setCurrentStep(currentStep + 1);
+    if (step.type === 'quiz' && !showAnswers) {
+      alert('Please complete the quiz before moving on.');
+      return;
+    }
+    if (currentStep < totalSteps - 1) {
+      setCurrentStep((prev) => prev + 1);
+      setShowAnswers(false);
+      setSelectedAnswers({});
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      setCurrentStep((prev) => prev - 1);
+      setShowAnswers(false);
+      setSelectedAnswers({});
     }
   };
 
-  const handleAnswerSelect = (questionId, answer) => {
-    setAnswers({
-      ...answers,
-      [questionId]: answer
-    });
+  const handleOptionChange = (questionIndex, option) => {
+    setSelectedAnswers((prev) => ({
+      ...prev,
+      [questionIndex]: option,
+    }));
   };
 
-  const renderContent = () => {
-    const step = lesson.steps[currentStep];
-
-    if (step.type === 'content') {
-      return (
-        <div className="content-card">
-          <h2 className="lesson-title">{step.title}</h2>
-          <div className="lesson-content">{step.content}</div>
-        </div>
-      );
-    }
-
-    if (step.type === 'quiz') {
-      return (
-        <div className="content-card">
-          <h3 className="quiz-question">{step.question}</h3>
-          <div className="quiz-options">
-            {step.options.map((option, index) => (
-              <button
-                key={index}
-                className={`quiz-option ${answers[step.id] === option ? 'selected' : ''}`}
-                onClick={() => handleAnswerSelect(step.id, option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      );
-    }
+  const checkAnswers = () => {
+    setShowAnswers(true);
   };
+
+  const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-3xl mx-auto p-4">
-        {/* Progress bar */}
-        <div className="progress-container">
-          <div 
-            className="progress-fill"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="step-counter">
-          Step {currentStep + 1} of {lesson.steps.length}
-          <span className="progress-percentage ml-2">
-            ({Math.round(progress)}% complete)
-          </span>
-        </div>
+    <div className="lesson-container">
+      {/* Progress bar */}
+      <div className="progress-bar" style={{ width: `${progress}%` }}></div>
 
-        {/* Content */}
-        {renderContent()}
-
-        {/* Navigation */}
-        <div className="flex justify-between mt-6">
-          <button
-            onClick={handlePrevious}
-            disabled={currentStep === 0}
-            className={`nav-button previous`}
-          >
-            <ChevronLeft className="w-5 h-5 mr-2" />
-            Previous
-          </button>
-          
-          <button
-            onClick={handleNext}
-            disabled={currentStep === lesson.steps.length - 1}
-            className={`nav-button next`}
-          >
-            Next
-            <ChevronRight className="w-5 h-5 ml-2" />
-          </button>
+      {/* Render content or quiz */}
+      {step.type === 'content' && (
+        <div className="lesson-content">
+          <h2>{step.title}</h2>
+          <p>{step.content}</p>
         </div>
+      )}
+
+      {step.type === 'quiz' && (
+        <div className="lesson-quiz">
+          <h3>{step.quizTitle || 'Quiz'}</h3>
+          {step.questions.map((q, questionIndex) => (
+            <div key={questionIndex} style={{ marginBottom: '1rem' }}>
+              <p>
+                <strong>Q{questionIndex + 1}:</strong> {q.question}
+              </p>
+              {q.options.map((option, optIndex) => (
+                <div key={optIndex}>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`question-${questionIndex}`}
+                      value={option}
+                      checked={selectedAnswers[questionIndex] === option}
+                      onChange={() => handleOptionChange(questionIndex, option)}
+                    />
+                    {option}
+                  </label>
+                </div>
+              ))}
+              {showAnswers && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  {selectedAnswers[questionIndex] === q.correctAnswer
+                    ? 'Correct!'
+                    : `Incorrect. Correct answer: ${q.correctAnswer}`}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {!showAnswers && (
+            <button onClick={checkAnswers} style={{ marginTop: '1rem' }}>
+              Check Answers
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Navigation */}
+      <div className="navigation">
+        <button onClick={handlePrevious} disabled={currentStep === 0}>
+          Previous
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={currentStep === totalSteps - 1 || isQuizIncomplete}
+        >
+          Next
+        </button>
       </div>
+
+      {/* “Looking away” text */}
+      {isLookingAway && (
+        <div style={{ color: 'red', marginTop: '1rem' }}>
+          You seem to be looking away!
+        </div>
+      )}
     </div>
   );
 };

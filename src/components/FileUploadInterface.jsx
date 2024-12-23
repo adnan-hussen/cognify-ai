@@ -1,152 +1,69 @@
 import React, { useState } from 'react';
-import { useMsal } from '@azure/msal-react';
+import axios from 'axios';
 import LessonViewer from './LessonViewer';
 
-const MenuModal = ({ onClose }) => {
-  const { instance } = useMsal();
-
-  const handleLogout = async () => {
-    try {
-      await instance.logoutRedirect({
-        postLogoutRedirectUri: window.location.origin
-      });
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
-
-  return (
-    <div className="menu-modal-overlay" onClick={onClose}>
-      <div className="menu-modal-content" onClick={e => e.stopPropagation()}>
-        <div className="menu-items">
-          <button className="menu-item">
-            <i className="bi bi-star-fill me-2"></i>
-            Get Premium
-          </button>
-          <button className="menu-item text-danger">
-            <i className="bi bi-trash-fill me-2"></i>
-            Delete Account
-          </button>
-          <div className="menu-divider"></div>
-          <button 
-            className="menu-item"
-            onClick={handleLogout}
-          >
-            <i className="bi bi-box-arrow-right me-2"></i>
-            Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+// Helper function to request fullscreen
+function requestFullscreen(element) {
+  if (element.requestFullscreen) {
+    element.requestFullscreen();
+  } else if (element.mozRequestFullScreen) { /* Firefox */
+    element.mozRequestFullScreen();
+  } else if (element.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+    element.webkitRequestFullscreen();
+  } else if (element.msRequestFullscreen) { /* IE/Edge */
+    element.msRequestFullscreen();
+  }
+}
 
 const FileUploadInterface = () => {
-  const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState(null);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showLesson, setShowLesson] = useState(false);
+  const [lesson, setLesson] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const files = e.dataTransfer.files;
-    if (files?.length) {
-      setFile(files[0]);
-    }
-  };
-
   const handleFileInput = (e) => {
-    const files = e.target.files;
-    if (files?.length) {
-      setFile(files[0]);
+    setFile(e.target.files[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return alert('Please upload a file.');
+
+    // Attempt fullscreen as soon as the user clicks
+    requestFullscreen(document.documentElement);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsLoading(true);
+    try {
+      const { data } = await axios.post(
+        'http://localhost:5000/analyze-and-generate',
+        formData
+      );
+
+      if (data.error) {
+        console.error('Server returned an error:', data.error);
+        alert(`Error: ${data.error}`);
+      } else {
+        // data.lesson contains the validated lesson JSON
+        setLesson(data.lesson);
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleStartSession = () => {
-    setShowLesson(true);
-  };
-
-  if (showLesson) {
-    return (
-      <>
-        <button 
-          className="menu-button"
-          onClick={() => setShowMenu(true)}
-          aria-label="Menu"
-        >
-          <i className="bi bi-list"></i>
-        </button>
-        <LessonViewer />
-        {showMenu && <MenuModal onClose={() => setShowMenu(false)} />}
-      </>
-    );
+  if (lesson) {
+    return <LessonViewer lesson={lesson} />;
   }
 
   return (
-    <div className="chat-container">
-      <button 
-        className="menu-button"
-        onClick={() => setShowMenu(true)}
-        aria-label="Menu"
-      >
-        <i className="bi bi-list"></i>
+    <div className="upload-container">
+      <input type="file" onChange={handleFileInput} accept=".pdf,.docx,.txt" />
+      <button onClick={handleUpload} disabled={!file || isLoading}>
+        {isLoading ? 'Processing...' : 'Upload and Generate Lesson'}
       </button>
-
-      <div className="upload-content">
-        <div 
-          className={`upload-area ${isDragging ? 'dragging' : ''}`}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <p>Paste your text or upload a file.</p>
-          
-          <label className="upload-icon">
-            <input
-              type="file"
-              className="hidden-input"
-              onChange={handleFileInput}
-              accept="text/*,.pdf,.doc,.docx"
-            />
-            <i className="bi bi-cloud-upload"></i>
-          </label>
-          {file && (
-            <p className="mt-3">Selected file: {file.name}</p>
-          )}
-        </div>
-
-        <button
-          className="btn-custom"
-          id="start-button"
-          onClick={handleStartSession}
-        >
-          Start Session
-        </button>
-      </div>
-
-      {showMenu && <MenuModal onClose={() => setShowMenu(false)} />}
     </div>
   );
 };

@@ -10,17 +10,24 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure-rest/ai-document-intelligence": "^1.0.0",
+    "@azure/core-auth": "^1.9.0",
     "@azure/cosmos": "^4.2.0",
     "@azure/identity": "^4.5.0",
     "@azure/msal-browser": "^3.27.0",
     "@azure/msal-react": "^2.2.0",
     "@azure/openai": "^2.0.0",
+    "axios": "^1.7.9",
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
-    "express": "^4.21.1",
+    "cors": "^2.8.5",
+    "cross-fetch": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
     "http-proxy-middleware": "^3.0.3",
     "lucide-react": "^0.462.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.41.0",
+    "multer": "^1.4.5-lts.1",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.6",
     "react-bootstrap-icons": "^1.11.4",
@@ -28,7 +35,8 @@
     "react-router-dom": "^6.28.0",
     "rt-client": "file:rt-client-0.5.0.tgz",
     "socket.io-client": "^4.8.1",
-    "ts-loader": "^9.5.1"
+    "ts-loader": "^9.5.1",
+    "webgazer": "^3.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
