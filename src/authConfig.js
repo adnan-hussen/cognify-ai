@@ -4,7 +4,7 @@ export const msalConfig = {
         clientId: "71caec0f-8b1f-4014-bc6c-c212d3a46ae1", // Application (client) ID from Azure
         authority: "https://cognifyaitutor.b2clogin.com/cognifyaitutor.onmicrosoft.com/B2C_1_signinup",
         knownAuthorities: ["cognifyaitutor.b2clogin.com"],
-        redirectUri: window.location.origin, // Your app's redirect URI
+        redirectUri: "http://localhost:5173", // Your app's redirect URI
     },
     cache: {
         cacheLocation: "sessionStorage",

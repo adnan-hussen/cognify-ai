@@ -1,170 +1,358 @@
-import React, { useEffect, useState } from 'react';
-// Import WebGazer from npm
-import webgazer from 'webgazer';
+import React, { useEffect, useState, useRef } from 'react';
 
 const LessonViewer = ({ lesson }) => {
+  // Core lesson state
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showAnswers, setShowAnswers] = useState(false);
+  const [slideDirection, setSlideDirection] = useState('');
 
-  // Eye-tracking: immediate "looking away" feedback
+  // Eye tracking state
   const [isLookingAway, setIsLookingAway] = useState(false);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationPoint, setCalibrationPoint] = useState({ x: 0, y: 0 });
+  const [calibrationStep, setCalibrationStep] = useState(0);
+  const [error, setError] = useState("");
+  const [isTracking, setIsTracking] = useState(false);
 
+  // Lesson data
   const totalSteps = lesson.steps.length;
   const step = lesson.steps[currentStep];
   const progress = ((currentStep + 1) / totalSteps) * 100;
 
-  useEffect(() => {
-    // 1) Initialize WebGazer
-    webgazer
-      .setRegression('ridge') // Use default regression
-      .setGazeListener((gazeData) => {
-        if (!gazeData) {
-          // If no gaze data is available
-          setIsLookingAway(true);
-        } else {
-          // If gaze coordinates are off-screen, consider "looking away"
-          if (isOutOfScreen(gazeData.x, gazeData.y)) {
-            setIsLookingAway(true);
-          } else {
-            setIsLookingAway(false);
-          }
-        }
-      })
-      .begin();
+  // References
+  const lookingAwayTimeoutRef = useRef(null); // Not needed anymore, but keep for cleanup
+  const webgazerInitialized = useRef(false);
+  const contentAreaRef = useRef(null);
 
-    // 2) Hide webcam preview and overlays
-    webgazer
-      .showVideoPreview(false) // Hide camera feed
-      .showFaceOverlay(false) // Hide face overlay
-      .showFaceFeedbackBox(false); // Hide feedback box
+  // Calibration points
+  const calibrationPoints = useRef([
+    { x: 10, y: 10 },
+    { x: 50, y: 10 },
+    { x: 90, y: 10 },
+    { x: 10, y: 50 },
+    { x: 50, y: 50 },
+    { x: 90, y: 50 },
+    { x: 10, y: 90 },
+    { x: 50, y: 90 },
+    { x: 90, y: 90 }
+  ]);
 
-    // Cleanup when unmounting the component
-    return () => {
-      try {
-        webgazer.end(); // Stop WebGazer and release resources
-      } catch (err) {
-        console.warn('Error during webgazer.end():', err);
-      }
-    };
-  }, []);
+  const checkGaze = (data) => {
+    if (lookingAwayTimeoutRef.current) {
+      clearTimeout(lookingAwayTimeoutRef.current);
+    }
 
-  // Utility: check if gaze coordinates are off the visible window
-  const isOutOfScreen = (x, y) => {
-    if (x == null || y == null) return true;
-    if (x < 0 || x > window.innerWidth) return true;
-    if (y < 0 || y > window.innerHeight) return true;
-    return false;
-  };
-
-  // ---------- LESSON AND QUIZ LOGIC ----------
-  const handleNext = () => {
-    if (step.type === 'quiz' && !showAnswers) {
-      alert('Please complete the quiz before moving on.');
+    if (!data || !isTracking) {
+      console.log('No gaze data or not tracking');
+      setIsLookingAway(true);
       return;
     }
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep((prev) => prev + 1);
-      setShowAnswers(false);
-      setSelectedAnswers({});
+
+    const x = data.x;
+    const y = data.y;
+
+    if (isNaN(x) || isNaN(y)) {
+      console.log('Invalid coordinates');
+      setIsLookingAway(true);
+      return;
     }
-  };
 
-  const handlePrevious = () => {
-    if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
-      setShowAnswers(false);
-      setSelectedAnswers({});
+    const viewportMargin = 100;
+    if (
+      x < -viewportMargin ||
+      x > window.innerWidth + viewportMargin ||
+      y < -viewportMargin ||
+      y > window.innerHeight + viewportMargin
+    ) {
+      console.log('Outside viewport bounds');
+      setIsLookingAway(true);
+      return;
     }
+
+    if (contentAreaRef.current) {
+      const rect = contentAreaRef.current.getBoundingClientRect();
+      const margin = 100;
+
+      const isWithinContent =
+        x >= (rect.left - margin) &&
+        x <= (rect.right + margin) &&
+        y >= (rect.top - margin) &&
+        y <= (rect.bottom + margin);
+
+      if (!isWithinContent) {
+        console.log('Outside content area');
+        setIsLookingAway(true);
+        return;
+      }
+    }
+
+    console.log('Valid gaze detected');
+    setIsLookingAway(false);
   };
 
-  const handleOptionChange = (questionIndex, option) => {
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [questionIndex]: option,
-    }));
-  };
+  useEffect(() => {
+    const setupWebGazer = async () => {
+      try {
+        const script = document.createElement("script");
+        script.src = "https://webgazer.cs.brown.edu/webgazer.js";
+        script.async = true;
 
-  const checkAnswers = () => {
-    setShowAnswers(true);
-  };
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
 
-  const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
+        if (window.webgazer) {
+          const canvas = document.createElement('canvas');
+          canvas.getContext('2d', { willReadFrequently: true });
 
-  return (
-    <div className="lesson-container">
-      {/* Progress bar */}
-      <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+          await window.webgazer
+            .setRegression('ridge')
+            .setTracker('TFFacemesh')
+            .setGazeListener((data) => {
+              if (!isTracking) return;
+              checkGaze(data);
+            })
+            .begin();
 
-      {/* Render content or quiz */}
-      {step.type === 'content' && (
-        <div className="lesson-content">
-          <h2>{step.title}</h2>
-          <p>{step.content}</p>
-        </div>
-      )}
+          window.webgazer.params.smoothLevel = 0.5;
+          window.webgazer.params.showVideo = false;
+          window.webgazer.params.showFaceOverlay = false;
+          window.webgazer.params.showFaceFeedbackBox = false;
+          window.webgazer.params.showGazeDot = false;
 
-      {step.type === 'quiz' && (
-        <div className="lesson-quiz">
-          <h3>{step.quizTitle || 'Quiz'}</h3>
-          {step.questions.map((q, questionIndex) => (
-            <div key={questionIndex} style={{ marginBottom: '1rem' }}>
-              <p>
-                <strong>Q{questionIndex + 1}:</strong> {q.question}
-              </p>
-              {q.options.map((option, optIndex) => (
-                <div key={optIndex}>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`question-${questionIndex}`}
-                      value={option}
-                      checked={selectedAnswers[questionIndex] === option}
-                      onChange={() => handleOptionChange(questionIndex, option)}
+          webgazerInitialized.current = true;
+          console.log('WebGazer initialized successfully');
+        }
+      } catch (err) {
+        console.error('WebGazer setup failed:', err);
+        setError("Failed to initialize eye tracking. Please check camera permissions.");
+      }
+    };
+
+    setupWebGazer();
+
+    return () => {
+      if (window.webgazer) {
+        window.webgazer.end();
+      }
+      if (lookingAwayTimeoutRef.current) {
+        clearTimeout(lookingAwayTimeoutRef.current);
+      }
+    };
+  }, [isTracking]);
+
+  // ... (rest of the component code: startCalibration, moveCalibrationPoint, completeCalibration, navigation handlers, JSX)
+    const startCalibration = async () => {
+        try {
+            if (!webgazerInitialized.current) {
+                throw new Error("Eye tracking is not ready");
+            }
+
+            setIsCalibrating(true);
+            setCalibrationStep(0);
+            setIsLookingAway(false);
+
+            await window.webgazer.resume();
+            window.webgazer.showVideo(true);
+            window.webgazer.showFaceOverlay(true);
+            moveCalibrationPoint(0);
+        } catch (err) {
+            setError(err.message);
+            setIsCalibrating(false);
+        }
+    };
+
+    const moveCalibrationPoint = (step) => {
+        if (step >= calibrationPoints.current.length) {
+            completeCalibration();
+            return;
+        }
+
+        const point = calibrationPoints.current[step];
+        const x = (point.x * window.innerWidth) / 100;
+        const y = (point.y * window.innerHeight) / 100;
+        setCalibrationPoint({ x, y });
+        setCalibrationStep(step);
+
+        setTimeout(() => {
+            if (window.webgazer) {
+                window.webgazer.recordScreenPosition(x, y, 'click');
+                console.log(`Calibration point ${step + 1} recorded:`, { x, y });
+            }
+            moveCalibrationPoint(step + 1);
+        }, 2000);
+    };
+
+    const completeCalibration = () => {
+        setIsCalibrating(false);
+        window.webgazer.showVideo(false);
+        window.webgazer.showFaceOverlay(false);
+        setIsTracking(true);
+        setIsLookingAway(false);
+    };
+
+    // Navigation handlers
+    const handleNext = () => {
+        if (step.type === 'quiz' && !showAnswers) {
+            alert('Please complete the quiz before moving on.');
+            return;
+        }
+        if (currentStep < totalSteps - 1) {
+            setSlideDirection('slide-left');
+            setCurrentStep((prev) => prev + 1);
+            setShowAnswers(false);
+            setSelectedAnswers({});
+        }
+    };
+
+    const handlePrevious = () => {
+        if (currentStep > 0) {
+            setSlideDirection('slide-right');
+            setCurrentStep((prev) => prev - 1);
+            setShowAnswers(false);
+            setSelectedAnswers({});
+        }
+    };
+
+    const handleOptionChange = (questionIndex, option) => {
+        setSelectedAnswers((prev) => ({
+            ...prev,
+            [questionIndex]: option,
+        }));
+    };
+
+    const checkAnswers = () => {
+        setShowAnswers(true);
+    };
+
+    const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
+    return (
+        <div className="lesson-container">
+            {!isTracking && !isCalibrating && (
+                <button
+                    onClick={startCalibration}
+                    className="calibration-button"
+                >
+                    Start Eye Tracking Calibration
+                </button>
+            )}
+
+            {isCalibrating && (
+                <div className="calibration-overlay">
+                    <div
+                        className="calibration-point"
+                        style={{
+                            left: calibrationPoint.x,
+                            top: calibrationPoint.y,
+                        }}
                     />
-                    {option}
-                  </label>
+                    <div className="calibration-message">
+                        Follow the blue dot with your eyes.
+                        Step {calibrationStep + 1} of {calibrationPoints.current.length}
+                    </div>
                 </div>
-              ))}
-              {showAnswers && (
-                <div style={{ marginTop: '0.5rem' }}>
-                  {selectedAnswers[questionIndex] === q.correctAnswer
-                    ? 'Correct!'
-                    : `Incorrect. Correct answer: ${q.correctAnswer}`}
+            )}
+
+            {error && (
+                <div className="error-message">
+                    {error}
                 </div>
-              )}
-            </div>
-          ))}
+            )}
 
-          {!showAnswers && (
-            <button onClick={checkAnswers} style={{ marginTop: '1rem' }}>
-              Check Answers
-            </button>
-          )}
+            {isTracking && (
+                <div className="lesson-content-wrapper" ref={contentAreaRef}>
+                    <div className="progress-container">
+                        <div
+                            className="progress-bar"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+
+                    <div className={`lesson-card ${slideDirection}`}>
+                        {step.type === 'content' ? (
+                            <div className="lesson-content">
+                                <h2>{step.title}</h2>
+                                <p>{step.content}</p>
+                            </div>
+                        ) : (
+                            <div className="lesson-quiz">
+                                <h3>{step.quizTitle || 'Quiz'}</h3>
+                                {step.questions.map((q, questionIndex) => (
+                                    <div key={questionIndex} className="quiz-question">
+                                        <p>
+                                            <strong>Q{questionIndex + 1}:</strong> {q.question}
+                                        </p>
+                                        {q.options.map((option, optIndex) => (
+                                            <div key={optIndex} className="radio-option">
+                                                <input
+                                                    type="radio"
+                                                    id={`q${questionIndex}-opt${optIndex}`}
+                                                    name={`question-${questionIndex}`}
+                                                    value={option}
+                                                    checked={selectedAnswers[questionIndex] === option}
+                                                    onChange={() => handleOptionChange(questionIndex, option)}
+                                                    disabled={showAnswers}
+                                                />
+                                                <label htmlFor={`q${questionIndex}-opt${optIndex}`}>
+                                                    {option}
+                                                </label>
+                                            </div>
+                                        ))}
+                                        {showAnswers && (
+                                            <div className={`answer-feedback ${
+                                                selectedAnswers[questionIndex] === q.correctAnswer
+                                                    ? 'correct'
+                                                    : 'incorrect'
+                                            }`}>
+                                                {selectedAnswers[questionIndex] === q.correctAnswer ? (
+                                                    <span>Correct! Well done!</span>
+                                                ) : (
+                                                    <span>
+                                                        Incorrect. The correct answer is: {q.correctAnswer}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {!showAnswers && (
+                                    <button onClick={checkAnswers} className="check-answers-btn">
+                                        Check Answers
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="navigation">
+                        <button
+                            onClick={handlePrevious}
+                            disabled={currentStep === 0}
+                            className="nav-button previous"
+                        >
+                            Previous
+                        </button>
+                        <button
+                            onClick={handleNext}
+                            disabled={currentStep === totalSteps - 1 || isQuizIncomplete}
+                            className="nav-button next"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {isLookingAway && isTracking && !isCalibrating && (
+                <div className="looking-away-alert animate">
+                    Hey there! It seems like you're looking away from the screen.
+                </div>
+            )}
         </div>
-      )}
-
-      {/* Navigation */}
-      <div className="navigation">
-        <button onClick={handlePrevious} disabled={currentStep === 0}>
-          Previous
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={currentStep === totalSteps - 1 || isQuizIncomplete}
-        >
-          Next
-        </button>
-      </div>
-
-      {/* “Looking away” text */}
-      {isLookingAway && (
-        <div style={{ color: 'red', marginTop: '1rem' }}>
-          You seem to be looking away!
-        </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default LessonViewer;
