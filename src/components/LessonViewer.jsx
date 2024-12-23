@@ -2,6 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 
 const LessonViewer = ({ lesson }) => {
   // Core lesson state
+  // Add these with your other state variables
+const [isFullscreen, setIsFullscreen] = useState(false);
+const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
+  const [isWebGazerLoading, setIsWebGazerLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showAnswers, setShowAnswers] = useState(false);
@@ -72,10 +76,10 @@ const LessonViewer = ({ lesson }) => {
 
     if (contentAreaRef.current) {
       const rect = contentAreaRef.current.getBoundingClientRect();
-      const margin = 100;
+      const margin = 200;
 
       const isWithinContent =
-        x >= (rect.left - margin) &&
+        x >= (rect.left-margin) &&
         x <= (rect.right + margin) &&
         y >= (rect.top - margin) &&
         y <= (rect.bottom + margin);
@@ -94,6 +98,7 @@ const LessonViewer = ({ lesson }) => {
   useEffect(() => {
     const setupWebGazer = async () => {
       try {
+        setIsWebGazerLoading(true); 
         // Add style to hide WebGazer visual elements
         const style = document.createElement('style');
         style.textContent = `
@@ -144,10 +149,12 @@ const LessonViewer = ({ lesson }) => {
 
           webgazerInitialized.current = true;
           console.log('WebGazer initialized successfully');
+          setIsWebGazerLoading(false);
         }
       } catch (err) {
         console.error('WebGazer setup failed:', err);
         setError("Failed to initialize eye tracking. Please check camera permissions.");
+        setIsWebGazerLoading(false); 
       }
     };
 
@@ -169,6 +176,9 @@ const LessonViewer = ({ lesson }) => {
             if (!webgazerInitialized.current) {
                 throw new Error("Eye tracking is not ready");
             }
+
+            await enterFullscreen();
+            setIsFullscreen(true);
 
             setIsCalibrating(true);
             setCalibrationStep(0);
@@ -247,18 +257,44 @@ const LessonViewer = ({ lesson }) => {
         setShowAnswers(true);
     };
 
+    // Add these after your other functions
+const enterFullscreen = () => {
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen();
+  }
+};
+
+const exitFullscreenHandler = () => {
+  if (!document.fullscreenElement) {
+    setShowFullscreenWarning(true);
+    setIsFullscreen(false);
+  } else {
+    setIsFullscreen(true);
+    setShowFullscreenWarning(false);
+  }
+};
+
+// Add this useEffect to monitor fullscreen changes
+useEffect(() => {
+  document.addEventListener('fullscreenchange', exitFullscreenHandler);
+  
+  return () => {
+    document.removeEventListener('fullscreenchange', exitFullscreenHandler);
+  };
+}, []);
+
     const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
     return (
         <div className="lesson-container">
             {!isTracking && !isCalibrating && (
-                <button
-                    onClick={startCalibration}
-                    className="calibration-button"
-                >
-                    Start Eye Tracking Calibration
-                </button>
-            )}
-
+    <button
+        onClick={startCalibration}
+        className={`calibration-button ${isWebGazerLoading ? 'loading' : ''}`}
+        disabled={isWebGazerLoading}
+    >
+        {isWebGazerLoading ? 'Initializing Eye Tracking...' : 'Start Eye Tracking Calibration'}
+    </button>
+)}
             {isCalibrating && (
                 <div className="calibration-overlay">
                     <div
@@ -370,6 +406,27 @@ const LessonViewer = ({ lesson }) => {
                     Hey there! It seems like you're looking away from the screen.
                 </div>
             )}
+            {showFullscreenWarning && !isCalibrating && (
+  <div className="fullscreen-warning">
+    <div className="fullscreen-warning-content">
+      <h3>Seems you've exited fullscreen mode</h3>
+      <p>
+        Fullscreen mode helps you:
+        <ul>
+          <li>Stay focused on your learning materials</li>
+          <li>Avoid external distractions</li>
+          <li>Maintain better eye tracking accuracy</li>
+        </ul>
+      </p>
+      <button
+        className="fullscreen-button"
+        onClick={enterFullscreen}
+      >
+        Return to Fullscreen Mode
+      </button>
+    </div>
+  </div>
+)}
         </div>
     );
 };
