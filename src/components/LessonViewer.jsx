@@ -94,6 +94,22 @@ const LessonViewer = ({ lesson }) => {
   useEffect(() => {
     const setupWebGazer = async () => {
       try {
+        // Add style to hide WebGazer visual elements
+        const style = document.createElement('style');
+        style.textContent = `
+          #webgazerVideoContainer, 
+          #webgazerVideoFeed,
+          #webgazerFaceOverlay, 
+          #webgazerFaceFeedbackBox,
+          .webgazerGazeDot,
+          #webgazerGazeDot {
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+          }
+        `;
+        document.head.appendChild(style);
+
         const script = document.createElement("script");
         script.src = "https://webgazer.cs.brown.edu/webgazer.js";
         script.async = true;
@@ -116,6 +132,9 @@ const LessonViewer = ({ lesson }) => {
               checkGaze(data);
             })
             .begin();
+
+          // Add this line to disable prediction points
+          window.webgazer.showPredictionPoints(false);
 
           window.webgazer.params.smoothLevel = 0.5;
           window.webgazer.params.showVideo = false;
@@ -156,8 +175,8 @@ const LessonViewer = ({ lesson }) => {
             setIsLookingAway(false);
 
             await window.webgazer.resume();
-            window.webgazer.showVideo(true);
-            window.webgazer.showFaceOverlay(true);
+            window.webgazer.showVideo(false);
+            window.webgazer.showFaceOverlay(false);
             moveCalibrationPoint(0);
         } catch (err) {
             setError(err.message);
