@@ -1,7 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+
 
 const LessonViewer = ({ lesson }) => {
     // Core lesson state
+    const navigate = useNavigate();
+
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
     const [isWebGazerLoading, setIsWebGazerLoading] = useState(true);
@@ -48,6 +53,27 @@ const LessonViewer = ({ lesson }) => {
     const step = lesson.steps[currentStep];
     const progress = ((currentStep + 1) / totalSteps) * 100;
 
+    // State for shuffled questions
+    const [shuffledQuestions, setShuffledQuestions] = useState([]);
+
+    // Utility function to shuffle an array
+    const shuffleArray = (array) => {
+        return [...array].sort(() => Math.random() - 0.5);
+    };
+
+    // Shuffle options when a quiz step is loaded
+    useEffect(() => {
+        if (step.type === 'quiz') {
+            const shuffled = step.questions.map(question => ({
+                ...question,
+                shuffledOptions: shuffleArray(question.options),
+            }));
+            setShuffledQuestions(shuffled);
+        } else {
+            setShuffledQuestions([]);
+        }
+    }, [currentStep, step.type, step.questions]);
+
     const checkGaze = (data) => {
         if (lookingAwayTimeoutRef.current) {
             clearTimeout(lookingAwayTimeoutRef.current);
@@ -85,7 +111,7 @@ const LessonViewer = ({ lesson }) => {
             const margin = 200;
 
             const isWithinContent =
-                x >= (rect.left-margin) &&
+                x >= (rect.left - margin) &&
                 x <= (rect.right + margin) &&
                 y >= (rect.top - margin) &&
                 y <= (rect.bottom + margin);
@@ -204,7 +230,7 @@ const LessonViewer = ({ lesson }) => {
                     if (!isComplete) {
                         startTimer();
                     }
-                    return newIsBreak ? breakDuration * 60 : focusDuration * 60;
+                    return isBreak ? breakDuration * 60 : focusDuration * 60;
                 }
                 return prev - 1;
             });
@@ -305,6 +331,9 @@ const LessonViewer = ({ lesson }) => {
             setSelectedAnswers({});
         }
     };
+    const handleFinished=()=>{
+      navigate('/chat');
+    }
 
     const handleOptionChange = (questionIndex, option) => {
         setSelectedAnswers((prev) => ({
@@ -322,6 +351,7 @@ const LessonViewer = ({ lesson }) => {
             document.documentElement.requestFullscreen();
         }
     };
+
 
     const exitFullscreenHandler = () => {
         if (!document.fullscreenElement) {
@@ -355,7 +385,7 @@ const LessonViewer = ({ lesson }) => {
     }, [focusDuration, breakDuration, isBreak]);
 
     const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
-
+    
     return (
         <div className="lesson-container">
             {/* Pomodoro Timer */}
@@ -418,7 +448,8 @@ const LessonViewer = ({ lesson }) => {
                             </button>
                         </div>
 
-                        {showTimerSettings && (<div className="timer-settings">
+                        {showTimerSettings && (
+                            <div className="timer-settings">
                                 <div className="setting-group">
                                     <label>Focus Duration (minutes):</label>
                                     <input
@@ -509,12 +540,12 @@ const LessonViewer = ({ lesson }) => {
                         ) : (
                             <div className="lesson-quiz">
                                 <h3>{step.quizTitle || 'Quiz'}</h3>
-                                {step.questions.map((q, questionIndex) => (
+                                {shuffledQuestions.map((q, questionIndex) => (
                                     <div key={questionIndex} className="quiz-question">
                                         <p>
                                             <strong>Q{questionIndex + 1}:</strong> {q.question}
                                         </p>
-                                        {q.options.map((option, optIndex) => (
+                                        {q.shuffledOptions.map((option, optIndex) => (
                                             <div key={optIndex} className="radio-option">
                                                 <input
                                                     type="radio"
@@ -531,11 +562,13 @@ const LessonViewer = ({ lesson }) => {
                                             </div>
                                         ))}
                                         {showAnswers && (
-                                            <div className={`answer-feedback ${
-                                                selectedAnswers[questionIndex] === q.correctAnswer
-                                                    ? 'correct'
-                                                    : 'incorrect'
-                                            }`}>
+                                            <div
+                                                className={`answer-feedback ${
+                                                    selectedAnswers[questionIndex] === q.correctAnswer
+                                                        ? 'correct'
+                                                        : 'incorrect'
+                                                }`}
+                                            >
                                                 {selectedAnswers[questionIndex] === q.correctAnswer ? (
                                                     <span>Correct! Well done!</span>
                                                 ) : (
@@ -547,11 +580,7 @@ const LessonViewer = ({ lesson }) => {
                                         )}
                                     </div>
                                 ))}
-                                {!showAnswers && (
-                                    <button onClick={checkAnswers} className="check-answers-btn">
-                                        Check Answers
-                                    </button>
-                                )}
+                               
                             </div>
                         )}
                     </div>
@@ -565,11 +594,11 @@ const LessonViewer = ({ lesson }) => {
                             Previous
                         </button>
                         <button
-                            onClick={handleNext}
-                            disabled={currentStep === totalSteps - 1 || isQuizIncomplete}
+                            onClick={isQuizIncomplete?checkAnswers:currentStep != totalSteps - 1?handleNext : handleFinished}
+                            // disabled={currentStep === totalSteps - 1 || isQuizIncomplete}
                             className="nav-button next"
                         >
-                            Next
+                            {isQuizIncomplete?"Check Answers":currentStep === totalSteps - 1? "Finish": "Next"}
                         </button>
                     </div>
                 </div>

@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 import { useMsal } from '@azure/msal-react';
 import LessonViewer from './LessonViewer';
+import ThemeToggle from './ThemeToggle';
 
 // Menu Modal Component
 const MenuModal = ({ onClose }) => {
@@ -22,11 +23,19 @@ const MenuModal = ({ onClose }) => {
       <div className="menu-modal-content" onClick={e => e.stopPropagation()}>
         <div className="menu-items">
           <button className="menu-item">
-            <i className="bi bi-star-fill me-2"></i>
+            <i className="bi bi-star-fill"></i>
             Get Premium
           </button>
+          <button className="menu-item">
+            <i className="bi bi-gear-fill"></i>
+            Settings
+          </button>
+          <button className="menu-item">
+            <i className="bi bi-question-circle-fill"></i>
+            Help & Support
+          </button>
           <button className="menu-item text-danger">
-            <i className="bi bi-trash-fill me-2"></i>
+            <i className="bi bi-trash-fill"></i>
             Delete Account
           </button>
           <div className="menu-divider"></div>
@@ -34,26 +43,13 @@ const MenuModal = ({ onClose }) => {
             className="menu-item"
             onClick={handleLogout}
           >
-            <i className="bi bi-box-arrow-right me-2"></i>
+            <i className="bi bi-box-arrow-right"></i>
             Logout
           </button>
         </div>
       </div>
     </div>
   );
-};
-
-// Helper function to request fullscreen
-const requestFullscreen = (element) => {
-  if (element.requestFullscreen) {
-    element.requestFullscreen();
-  } else if (element.mozRequestFullScreen) {
-    element.mozRequestFullScreen();
-  } else if (element.webkitRequestFullscreen) {
-    element.webkitRequestFullscreen();
-  } else if (element.msRequestFullscreen) {
-    element.msRequestFullscreen();
-  }
 };
 
 const FileUploadInterface = () => {
@@ -63,6 +59,7 @@ const FileUploadInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const handleDragEnter = useCallback((e) => {
     e.preventDefault();
@@ -99,22 +96,38 @@ const FileUploadInterface = () => {
     }
   };
 
+  const getFileIcon = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    const iconMap = {
+      pdf: 'bi-file-pdf',
+      doc: 'bi-file-word',
+      docx: 'bi-file-word',
+      ppt: 'bi-file-ppt',
+      pptx: 'bi-file-ppt',
+      txt: 'bi-file-text',
+      xlsx: 'bi-file-excel',
+      jpg: 'bi-file-image',
+      png: 'bi-file-image',
+      html: 'bi-file-code'
+    };
+    return iconMap[extension] || 'bi-file-earmark';
+  };
+
   const handleUpload = async () => {
     if (!file) {
       alert('Please upload a file first');
       return;
     }
 
-    requestFullscreen(document.documentElement);
-    
     const formData = new FormData();
     formData.append('file', file);
 
     setIsLoading(true);
     setUploadProgress(0);
+    setUploadStatus('Uploading file...');
 
     try {
-      const { data } = await axios.post('http://localhost:5000/analyze-and-generate', 
+      const response = await axios.post('http://localhost:5000/analyze-and-generate', 
         formData,
         {
           onUploadProgress: (progressEvent) => {
@@ -122,19 +135,22 @@ const FileUploadInterface = () => {
               (progressEvent.loaded * 100) / progressEvent.total
             );
             setUploadProgress(percentCompleted);
+            if (percentCompleted === 100) {
+              setUploadStatus('Generating personalized lesson...');
+            }
           },
         }
       );
 
-      if (data.error) {
-        console.error('Server returned an error:', data.error);
-        alert(`Error: ${data.error}`);
-      } else {
-        setLesson(data.lesson);
+      if (response.data.error) {
+        throw new Error(response.data.error);
       }
+
+      setLesson(response.data.lesson);
     } catch (error) {
-      console.error('Error uploading file:', error);
-      alert('An error occurred while uploading the file. Please try again.');
+      console.error('Error:', error);
+      setUploadStatus('Error occurred. Please try again.');
+      setTimeout(() => setUploadStatus(''), 3000);
     } finally {
       setIsLoading(false);
       setUploadProgress(0);
@@ -147,6 +163,13 @@ const FileUploadInterface = () => {
 
   return (
     <div className="chat-container">
+      <div className="upload-background">
+        <div className="bg-pattern"></div>
+      </div>
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
       {/* Menu Button */}
       <button 
         className="menu-button"
@@ -157,7 +180,6 @@ const FileUploadInterface = () => {
       </button>
 
       <div className="upload-content">
-        {/* Upload Area */}
         <div 
           className={`upload-area ${isDragging ? 'dragging' : ''}`}
           onDragEnter={handleDragEnter}
@@ -165,12 +187,12 @@ const FileUploadInterface = () => {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <p>Drag and drop your study material here or click to upload</p>
-          <p className="file-types"></p>
+          <h2 className="upload-h2">Upload Your Study Material</h2>
+          <p>Drag and drop your file here, or click to browse</p>
           
           {file ? (
             <div className="file-preview">
-              <i className="bi bi-file-earmark-text"></i>
+              <i className={`bi ${getFileIcon(file.name)}`}></i>
               <span>{file.name}</span>
               <button 
                 className="remove-file"
@@ -204,12 +226,11 @@ const FileUploadInterface = () => {
                   aria-valuemax="100"
                 ></div>
               </div>
-              <span>{uploadProgress}% uploaded</span>
+              <span>{uploadStatus || `${uploadProgress}% uploaded`}</span>
             </div>
           )}
         </div>
 
-        {/* Start Button */}
         <button
           className="btn-custom"
           id="start-button"
@@ -218,16 +239,18 @@ const FileUploadInterface = () => {
         >
           {isLoading ? (
             <>
-              <i className="bi bi-hourglass-split me-2"></i>
-              Generating Lesson...
+              <i className="bi bi-hourglass-split"></i>
+              <span>Processing...</span>
             </>
           ) : (
-            'Start Studying'
+            <>
+              <i className="bi bi-lightning-charge"></i>
+              <span>Start Learning</span>
+            </>
           )}
         </button>
       </div>
 
-      {/* Menu Modal */}
       {showMenu && <MenuModal onClose={() => setShowMenu(false)} />}
     </div>
   );

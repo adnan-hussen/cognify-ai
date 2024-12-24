@@ -2,7 +2,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './components/AuthProvider';
 import { ProtectedRoute } from './components/ProtectedRoute';
-
+import { ThemeProvider } from './context/ThemeContext';
 // Components
 import LandingPage from './components/LandingPage';
 import FileUploadInterface from './components/FileUploadInterface';
@@ -10,7 +10,8 @@ import FileUploadInterface from './components/FileUploadInterface';
 
 function App() {
     return (
-        <Router>
+        <ThemeProvider>
+            <Router>
             <AuthProvider>
                 <Routes>
                     {/* Public route */}
@@ -30,6 +31,8 @@ function App() {
                 </Routes>
             </AuthProvider>
         </Router>
+        </ThemeProvider>
+        
     );
 }
 
