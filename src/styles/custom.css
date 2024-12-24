@@ -2022,3 +2022,380 @@ background-color: rgba(255, 255, 255, 0.2);
     transform: translate(-50%, 0);
   }
 }
+
+/* Add to custom.css */
+
+.pomodoro-timer {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  width: 300px;
+  transition: all 0.3s ease;
+}
+
+.timer-display {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.timer-count {
+  display: block;
+  font-size: 2.5rem;
+  font-weight: 600;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom: 5px;
+}
+
+.timer-count.focus {
+  color: var(--primary-color);
+}
+
+.timer-count.break {
+  color: #4CAF50;
+}
+
+.timer-label {
+  display: block;
+  font-size: 1rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+.timer-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.timer-button:hover {
+  background-color: #5A75B3;
+  transform: translateY(-1px);
+}
+
+.timer-settings {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.setting-group {
+  margin-bottom: 10px;
+}
+
+.setting-group:last-child {
+  margin-bottom: 0;
+}
+
+.setting-group label {
+  display: block;
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.setting-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  font-size: 0.9rem;
+}
+
+.setting-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(107, 139, 201, 0.25);
+}
+
+@media (max-width: 768px) {
+  .pomodoro-timer {
+    position: fixed;
+    top: auto;
+    bottom: 20px;
+    right: 20px;
+    width: calc(100% - 40px);
+    max-width: 300px;
+  }
+  
+  .timer-count {
+    font-size: 2rem;
+  }
+  
+  .timer-controls {
+    flex-wrap: wrap;
+  }
+  
+  .timer-button {
+    flex: 1;
+    min-width: 80px;
+  }
+}
+/* Add these styles to your custom.css */
+
+/* Minimized Timer Styles */
+.pomodoro-timer.minimized {
+  width: auto;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.pomodoro-timer.minimized .timer-display {
+  margin-bottom: 0;
+}
+
+.pomodoro-timer.minimized .timer-controls,
+.pomodoro-timer.minimized .timer-settings,
+.pomodoro-timer.minimized .timer-label {
+  display: none;
+}
+
+/* Minimize Button */
+.minimize-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.minimize-button:hover {
+  color: var(--primary-color);
+}
+
+/* Cycles Display */
+.cycles-display {
+  text-align: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+/* Add to your existing timer settings styles */
+.setting-group.cycles {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+/* Timer base styles */
+.pomodoro-timer {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  width: 300px;
+  transition: all 0.3s ease;
+}
+
+/* Minimized timer styles */
+.pomodoro-timer.minimized {
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border-radius: 25px;
+  cursor: pointer;
+  background-color: var(--primary-color);
+  box-shadow: 0 4px 10px rgba(107, 139, 201, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pomodoro-timer.minimized:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(107, 139, 201, 0.4);
+}
+
+/* Hide elements when minimized */
+.pomodoro-timer.minimized .timer-display,
+.pomodoro-timer.minimized .timer-controls,
+.pomodoro-timer.minimized .timer-settings {
+  display: none;
+}
+
+/* Minimize button styles */
+.minimize-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  z-index: 2;
+}
+
+.minimize-button:hover {
+  color: var(--primary-color);
+}
+
+/* Minimize button in minimized state */
+.pomodoro-timer.minimized .minimize-button {
+  position: static;
+  width: 100%;
+  height: 100%;
+  color: white;
+  font-size: 1.5rem;
+  background: transparent;
+}
+
+.pomodoro-timer.minimized .minimize-button:hover {
+  color: white;
+}
+
+/* Timer display styles */
+.timer-display {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.timer-count {
+  display: block;
+  font-size: 2.5rem;
+  font-weight: 600;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom: 5px;
+}
+
+.timer-count.focus {
+  color: var(--primary-color);
+}
+
+.timer-count.break {
+  color: #4CAF50;
+}
+
+.timer-label {
+  display: block;
+  font-size: 1rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+/* Cycles display */
+.cycles-display {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid #eee;
+}
+
+/* Timer controls */
+.timer-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 15px 0;
+}
+
+.timer-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.timer-button:hover:not(:disabled) {
+  background-color: #5A75B3;
+  transform: translateY(-1px);
+}
+
+.timer-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settings styles */
+.timer-settings {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.setting-group {
+  margin-bottom: 10px;
+}
+
+.setting-group:last-child {
+  margin-bottom: 0;
+}
+
+.setting-group label {
+  display: block;
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.setting-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  font-size: 0.9rem;
+}
+
+.setting-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(107, 139, 201, 0.25);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .pomodoro-timer:not(.minimized) {
+    width: calc(100% - 40px);
+    max-width: 300px;
+  }
+
+  .pomodoro-timer.minimized {
+    bottom: 20px;
+    top: auto;
+  }
+}

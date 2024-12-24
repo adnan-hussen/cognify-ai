@@ -1,176 +1,238 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 const LessonViewer = ({ lesson }) => {
-  // Core lesson state
-  // Add these with your other state variables
-const [isFullscreen, setIsFullscreen] = useState(false);
-const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
-  const [isWebGazerLoading, setIsWebGazerLoading] = useState(true);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState({});
-  const [showAnswers, setShowAnswers] = useState(false);
-  const [slideDirection, setSlideDirection] = useState('');
+    // Core lesson state
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
+    const [isWebGazerLoading, setIsWebGazerLoading] = useState(true);
+    const [currentStep, setCurrentStep] = useState(0);
+    const [selectedAnswers, setSelectedAnswers] = useState({});
+    const [showAnswers, setShowAnswers] = useState(false);
+    const [slideDirection, setSlideDirection] = useState('');
 
-  // Eye tracking state
-  const [isLookingAway, setIsLookingAway] = useState(false);
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [calibrationPoint, setCalibrationPoint] = useState({ x: 0, y: 0 });
-  const [calibrationStep, setCalibrationStep] = useState(0);
-  const [error, setError] = useState("");
-  const [isTracking, setIsTracking] = useState(false);
+    // Eye tracking state
+    const [isLookingAway, setIsLookingAway] = useState(false);
+    const [isCalibrating, setIsCalibrating] = useState(false);
+    const [calibrationPoint, setCalibrationPoint] = useState({ x: 0, y: 0 });
+    const [calibrationStep, setCalibrationStep] = useState(0);
+    const [error, setError] = useState("");
+    const [isTracking, setIsTracking] = useState(false);
 
-  // Lesson data
-  const totalSteps = lesson.steps.length;
-  const step = lesson.steps[currentStep];
-  const progress = ((currentStep + 1) / totalSteps) * 100;
+    // Timer state
+    const [isTimerRunning, setIsTimerRunning] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(25 * 60);
+    const [isBreak, setIsBreak] = useState(false);
+    const [focusDuration, setFocusDuration] = useState(25);
+    const [breakDuration, setBreakDuration] = useState(5);
+    const [showTimerSettings, setShowTimerSettings] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(false);
+    const [totalCycles, setTotalCycles] = useState(4);
+    const [currentCycle, setCurrentCycle] = useState(1);
+    const [isComplete, setIsComplete] = useState(false);
 
-  // References
-  const lookingAwayTimeoutRef = useRef(null); // Not needed anymore, but keep for cleanup
-  const webgazerInitialized = useRef(false);
-  const contentAreaRef = useRef(null);
+    // References
+    const lookingAwayTimeoutRef = useRef(null);
+    const webgazerInitialized = useRef(false);
+    const contentAreaRef = useRef(null);
+    const timerIntervalRef = useRef(null);
 
-  // Calibration points
-  const calibrationPoints = useRef([
-    { x: 10, y: 10 },
-    { x: 50, y: 10 },
-    { x: 90, y: 10 },
-    { x: 10, y: 50 },
-    { x: 50, y: 50 },
-    { x: 90, y: 50 },
-    { x: 10, y: 90 },
-    { x: 50, y: 90 },
-    { x: 90, y: 90 }
-  ]);
+    // Calibration points
+    const calibrationPoints = useRef([
+        { x: 10, y: 10 }, { x: 50, y: 10 }, { x: 90, y: 10 },
+        { x: 10, y: 50 }, { x: 50, y: 50 }, { x: 90, y: 50 },
+        { x: 10, y: 90 }, { x: 50, y: 90 }, { x: 90, y: 90 }
+    ]);
 
-  const checkGaze = (data) => {
-    if (lookingAwayTimeoutRef.current) {
-      clearTimeout(lookingAwayTimeoutRef.current);
-    }
+    // Lesson data
+    const totalSteps = lesson.steps.length;
+    const step = lesson.steps[currentStep];
+    const progress = ((currentStep + 1) / totalSteps) * 100;
 
-    if (!data || !isTracking) {
-      console.log('No gaze data or not tracking');
-      setIsLookingAway(true);
-      return;
-    }
-
-    const x = data.x;
-    const y = data.y;
-
-    if (isNaN(x) || isNaN(y)) {
-      console.log('Invalid coordinates');
-      setIsLookingAway(true);
-      return;
-    }
-
-    const viewportMargin = 100;
-    if (
-      x < -viewportMargin ||
-      x > window.innerWidth + viewportMargin ||
-      y < -viewportMargin ||
-      y > window.innerHeight + viewportMargin
-    ) {
-      console.log('Outside viewport bounds');
-      setIsLookingAway(true);
-      return;
-    }
-
-    if (contentAreaRef.current) {
-      const rect = contentAreaRef.current.getBoundingClientRect();
-      const margin = 200;
-
-      const isWithinContent =
-        x >= (rect.left-margin) &&
-        x <= (rect.right + margin) &&
-        y >= (rect.top - margin) &&
-        y <= (rect.bottom + margin);
-
-      if (!isWithinContent) {
-        console.log('Outside content area');
-        setIsLookingAway(true);
-        return;
-      }
-    }
-
-    console.log('Valid gaze detected');
-    setIsLookingAway(false);
-  };
-
-  useEffect(() => {
-    const setupWebGazer = async () => {
-      try {
-        setIsWebGazerLoading(true); 
-        // Add style to hide WebGazer visual elements
-        const style = document.createElement('style');
-        style.textContent = `
-          #webgazerVideoContainer, 
-          #webgazerVideoFeed,
-          #webgazerFaceOverlay, 
-          #webgazerFaceFeedbackBox,
-          .webgazerGazeDot,
-          #webgazerGazeDot {
-            display: none !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-          }
-        `;
-        document.head.appendChild(style);
-
-        const script = document.createElement("script");
-        script.src = "https://webgazer.cs.brown.edu/webgazer.js";
-        script.async = true;
-
-        await new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
-          document.body.appendChild(script);
-        });
-
-        if (window.webgazer) {
-          const canvas = document.createElement('canvas');
-          canvas.getContext('2d', { willReadFrequently: true });
-
-          await window.webgazer
-            .setRegression('ridge')
-            .setTracker('TFFacemesh')
-            .setGazeListener((data) => {
-              if (!isTracking) return;
-              checkGaze(data);
-            })
-            .begin();
-
-          // Add this line to disable prediction points
-          window.webgazer.showPredictionPoints(false);
-
-          window.webgazer.params.smoothLevel = 0.5;
-          window.webgazer.params.showVideo = false;
-          window.webgazer.params.showFaceOverlay = false;
-          window.webgazer.params.showFaceFeedbackBox = false;
-          window.webgazer.params.showGazeDot = false;
-
-          webgazerInitialized.current = true;
-          console.log('WebGazer initialized successfully');
-          setIsWebGazerLoading(false);
+    const checkGaze = (data) => {
+        if (lookingAwayTimeoutRef.current) {
+            clearTimeout(lookingAwayTimeoutRef.current);
         }
-      } catch (err) {
-        console.error('WebGazer setup failed:', err);
-        setError("Failed to initialize eye tracking. Please check camera permissions.");
-        setIsWebGazerLoading(false); 
-      }
+
+        if (!data || !isTracking) {
+            console.log('No gaze data or not tracking');
+            setIsLookingAway(true);
+            return;
+        }
+
+        const x = data.x;
+        const y = data.y;
+
+        if (isNaN(x) || isNaN(y)) {
+            console.log('Invalid coordinates');
+            setIsLookingAway(true);
+            return;
+        }
+
+        const viewportMargin = 100;
+        if (
+            x < -viewportMargin ||
+            x > window.innerWidth + viewportMargin ||
+            y < -viewportMargin ||
+            y > window.innerHeight + viewportMargin
+        ) {
+            console.log('Outside viewport bounds');
+            setIsLookingAway(true);
+            return;
+        }
+
+        if (contentAreaRef.current) {
+            const rect = contentAreaRef.current.getBoundingClientRect();
+            const margin = 200;
+
+            const isWithinContent =
+                x >= (rect.left-margin) &&
+                x <= (rect.right + margin) &&
+                y >= (rect.top - margin) &&
+                y <= (rect.bottom + margin);
+
+            if (!isWithinContent) {
+                console.log('Outside content area');
+                setIsLookingAway(true);
+                return;
+            }
+        }
+
+        console.log('Valid gaze detected');
+        setIsLookingAway(false);
     };
 
-    setupWebGazer();
+    useEffect(() => {
+        const setupWebGazer = async () => {
+            try {
+                setIsWebGazerLoading(true);
+                const style = document.createElement('style');
+                style.textContent = `
+                    #webgazerVideoContainer, 
+                    #webgazerVideoFeed,
+                    #webgazerFaceOverlay, 
+                    #webgazerFaceFeedbackBox,
+                    .webgazerGazeDot,
+                    #webgazerGazeDot {
+                        display: none !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
 
-    return () => {
-      if (window.webgazer) {
-        window.webgazer.end();
-      }
-      if (lookingAwayTimeoutRef.current) {
-        clearTimeout(lookingAwayTimeoutRef.current);
-      }
+                const script = document.createElement("script");
+                script.src = "https://webgazer.cs.brown.edu/webgazer.js";
+                script.async = true;
+
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.body.appendChild(script);
+                });
+
+                if (window.webgazer) {
+                    const canvas = document.createElement('canvas');
+                    canvas.getContext('2d', { willReadFrequently: true });
+
+                    await window.webgazer
+                        .setRegression('ridge')
+                        .setTracker('TFFacemesh')
+                        .setGazeListener((data) => {
+                            if (!isTracking) return;
+                            checkGaze(data);
+                        })
+                        .begin();
+
+                    window.webgazer.showPredictionPoints(false);
+                    window.webgazer.params.smoothLevel = 0.5;
+                    window.webgazer.params.showVideo = false;
+                    window.webgazer.params.showFaceOverlay = false;
+                    window.webgazer.params.showFaceFeedbackBox = false;
+                    window.webgazer.params.showGazeDot = false;
+
+                    webgazerInitialized.current = true;
+                    console.log('WebGazer initialized successfully');
+                    setIsWebGazerLoading(false);
+                }
+            } catch (err) {
+                console.error('WebGazer setup failed:', err);
+                setError("Failed to initialize eye tracking. Please check camera permissions.");
+                setIsWebGazerLoading(false);
+            }
+        };
+
+        setupWebGazer();
+
+        return () => {
+            if (window.webgazer) {
+                window.webgazer.end();
+            }
+            if (lookingAwayTimeoutRef.current) {
+                clearTimeout(lookingAwayTimeoutRef.current);
+            }
+        };
+    }, [isTracking]);
+
+    const startTimer = () => {
+        if (timerIntervalRef.current || isComplete) return;
+        
+        setIsTimerRunning(true);
+        timerIntervalRef.current = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = null;
+                    
+                    setIsBreak(prevIsBreak => {
+                        const newIsBreak = !prevIsBreak;
+                        if (newIsBreak) {
+                            setTimeLeft(breakDuration * 60);
+                        } else {
+                            setCurrentCycle(prev => {
+                                const nextCycle = prev + 1;
+                                if (nextCycle > totalCycles) {
+                                    setIsComplete(true);
+                                    return prev;
+                                }
+                                return nextCycle;
+                            });
+                            setTimeLeft(focusDuration * 60);
+                        }
+                        return newIsBreak;
+                    });
+                    
+                    if (!isComplete) {
+                        startTimer();
+                    }
+                    return newIsBreak ? breakDuration * 60 : focusDuration * 60;
+                }
+                return prev - 1;
+            });
+        }, 1000);
     };
-  }, [isTracking]);
 
-  // ... (rest of the component code: startCalibration, moveCalibrationPoint, completeCalibration, navigation handlers, JSX)
+    const pauseTimer = () => {
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+        }
+        setIsTimerRunning(false);
+    };
+
+    const resetTimer = () => {
+        pauseTimer();
+        setTimeLeft(focusDuration * 60);
+        setIsBreak(false);
+        setCurrentCycle(1);
+        setIsComplete(false);
+    };
+
+    const formatTime = (timeInSeconds) => {
+        const minutes = Math.floor(timeInSeconds / 60);
+        const seconds = timeInSeconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
     const startCalibration = async () => {
         try {
             if (!webgazerInitialized.current) {
@@ -179,7 +241,6 @@ const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
 
             await enterFullscreen();
             setIsFullscreen(true);
-
             setIsCalibrating(true);
             setCalibrationStep(0);
             setIsLookingAway(false);
@@ -223,7 +284,6 @@ const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
         setIsLookingAway(false);
     };
 
-    // Navigation handlers
     const handleNext = () => {
         if (step.type === 'quiz' && !showAnswers) {
             alert('Please complete the quiz before moving on.');
@@ -257,44 +317,156 @@ const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
         setShowAnswers(true);
     };
 
-    // Add these after your other functions
-const enterFullscreen = () => {
-  if (document.documentElement.requestFullscreen) {
-    document.documentElement.requestFullscreen();
-  }
-};
+    const enterFullscreen = () => {
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+        }
+    };
 
-const exitFullscreenHandler = () => {
-  if (!document.fullscreenElement) {
-    setShowFullscreenWarning(true);
-    setIsFullscreen(false);
-  } else {
-    setIsFullscreen(true);
-    setShowFullscreenWarning(false);
-  }
-};
+    const exitFullscreenHandler = () => {
+        if (!document.fullscreenElement) {
+            setShowFullscreenWarning(true);
+            setIsFullscreen(false);
+        } else {
+            setIsFullscreen(true);
+            setShowFullscreenWarning(false);
+        }
+    };
 
-// Add this useEffect to monitor fullscreen changes
-useEffect(() => {
-  document.addEventListener('fullscreenchange', exitFullscreenHandler);
-  
-  return () => {
-    document.removeEventListener('fullscreenchange', exitFullscreenHandler);
-  };
-}, []);
+    useEffect(() => {
+        document.addEventListener('fullscreenchange', exitFullscreenHandler);
+        return () => {
+            document.removeEventListener('fullscreenchange', exitFullscreenHandler);
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!isTimerRunning) {
+            setTimeLeft(isBreak ? breakDuration * 60 : focusDuration * 60);
+        }
+    }, [focusDuration, breakDuration, isBreak]);
 
     const isQuizIncomplete = step.type === 'quiz' && !showAnswers;
+
     return (
         <div className="lesson-container">
+            {/* Pomodoro Timer */}
+            <div className={`pomodoro-timer ${isMinimized ? 'minimized' : ''}`} 
+                onClick={() => isMinimized && setIsMinimized(false)}>
+                {isMinimized ? (
+                    <button 
+                        className="minimize-button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsMinimized(false);
+                        }}
+                    >
+                        <i className="bi bi-clock"></i>
+                    </button>
+                ) : (
+                    <>
+                        <button 
+                            className="minimize-button"
+                            onClick={() => setIsMinimized(true)}
+                        >
+                            ⎯
+                        </button>
+                        
+                        <div className="timer-display">
+                            <span className={`timer-count ${isBreak ? 'break' : 'focus'}`}>
+                                {formatTime(timeLeft)}
+                            </span>
+                            <span className="timer-label">
+                                {isBreak ? 'Break Time' : 'Focus Time'}
+                            </span>
+                            <div className="cycles-display">
+                                {isComplete ? (
+                                    <span>All cycles complete! 🎉</span>
+                                ) : (
+                                    <span>Cycle {currentCycle} of {totalCycles}</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="timer-controls">
+                            <button 
+                                className="timer-button"
+                                onClick={isTimerRunning ? pauseTimer : startTimer}
+                                disabled={isComplete}
+                            >
+                                {isTimerRunning ? 'Pause' : 'Start'}
+                            </button>
+                            <button 
+                                className="timer-button"
+                                onClick={resetTimer}
+                            >
+                                Reset
+                            </button>
+                            <button 
+                                className="timer-button"
+                                onClick={() => setShowTimerSettings(!showTimerSettings)}
+                            >
+                                Settings
+                            </button>
+                        </div>
+
+                        {showTimerSettings && (<div className="timer-settings">
+                                <div className="setting-group">
+                                    <label>Focus Duration (minutes):</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="60"
+                                        value={focusDuration}
+                                        onChange={(e) => setFocusDuration(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+                                    />
+                                </div>
+                                <div className="setting-group">
+                                    <label>Break Duration (minutes):</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="30"
+                                        value={breakDuration}
+                                        onChange={(e) => setBreakDuration(Math.max(1, Math.min(30, parseInt(e.target.value) || 1)))}
+                                    />
+                                </div>
+                                <div className="setting-group cycles">
+                                    <label>Number of Cycles:</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="10"
+                                        value={totalCycles}
+                                        onChange={(e) => setTotalCycles(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {/* Eye Tracking Calibration Button */}
             {!isTracking && !isCalibrating && (
-    <button
-        onClick={startCalibration}
-        className={`calibration-button ${isWebGazerLoading ? 'loading' : ''}`}
-        disabled={isWebGazerLoading}
-    >
-        {isWebGazerLoading ? 'Initializing Eye Tracking...' : 'Start Eye Tracking Calibration'}
-    </button>
-)}
+                <button
+                    onClick={startCalibration}
+                    className={`calibration-button ${isWebGazerLoading ? 'loading' : ''}`}
+                    disabled={isWebGazerLoading}
+                >
+                    {isWebGazerLoading ? 'Initializing Eye Tracking...' : 'Start Eye Tracking Calibration'}
+                </button>
+            )}
+
+            {/* Calibration Overlay */}
             {isCalibrating && (
                 <div className="calibration-overlay">
                     <div
@@ -311,12 +483,14 @@ useEffect(() => {
                 </div>
             )}
 
+            {/* Error Message */}
             {error && (
                 <div className="error-message">
                     {error}
                 </div>
             )}
 
+            {/* Main Lesson Content */}
             {isTracking && (
                 <div className="lesson-content-wrapper" ref={contentAreaRef}>
                     <div className="progress-container">
@@ -401,32 +575,30 @@ useEffect(() => {
                 </div>
             )}
 
-            {isLookingAway && isTracking && !isCalibrating && (
+            {/* Looking Away Alert - Only show if not in break */}
+            {isLookingAway && isTracking && !isCalibrating && !isBreak && (
                 <div className="looking-away-alert animate">
-                    Hey there! It seems like you're looking away from the screen.
+                    Hey, stay focused!
                 </div>
             )}
+
+            {/* Fullscreen Warning */}
             {showFullscreenWarning && !isCalibrating && (
-  <div className="fullscreen-warning">
-    <div className="fullscreen-warning-content">
-      <h3>Seems you've exited fullscreen mode</h3>
-      <p>
-        Fullscreen mode helps you:
-        <ul>
-          <li>Stay focused on your learning materials</li>
-          <li>Avoid external distractions</li>
-          <li>Maintain better eye tracking accuracy</li>
-        </ul>
-      </p>
-      <button
-        className="fullscreen-button"
-        onClick={enterFullscreen}
-      >
-        Return to Fullscreen Mode
-      </button>
-    </div>
-  </div>
-)}
+                <div className="fullscreen-warning">
+                    <div className="fullscreen-warning-content">
+                        <h3>Seems you've exited fullscreen mode</h3>
+                        <div className="warning-text">
+                            Fullscreen mode helps you focus better by minimizing distractions.
+                        </div>
+                        <button
+                            className="fullscreen-button"
+                            onClick={enterFullscreen}
+                        >
+                            Return to Fullscreen Mode
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

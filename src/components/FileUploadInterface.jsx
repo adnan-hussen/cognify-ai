@@ -165,8 +165,8 @@ const FileUploadInterface = () => {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <p>Drop your study material here or click to upload</p>
-          <p className="file-types">Supported formats: PDF, DOCX, TXT</p>
+          <p>Drag and drop your study material here or click to upload</p>
+          <p className="file-types"></p>
           
           {file ? (
             <div className="file-preview">
@@ -186,7 +186,7 @@ const FileUploadInterface = () => {
                 type="file"
                 className="hidden-input"
                 onChange={handleFileInput}
-                accept=".pdf,.docx,.txt"
+                accept=".pdf,.docx,.doc,.ppt,.pptx,.txt,.xlsx,.jpg,.png,.html"
               />
               <i className="bi bi-cloud-upload"></i>
             </label>
@@ -222,7 +222,7 @@ const FileUploadInterface = () => {
               Generating Lesson...
             </>
           ) : (
-            'Start Learning'
+            'Start Studying'
           )}
         </button>
       </div>
